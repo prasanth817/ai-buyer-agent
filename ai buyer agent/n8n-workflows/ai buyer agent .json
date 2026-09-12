@@ -1,0 +1,393 @@
+{
+  "name": "Ai Buyer agent",
+  "nodes": [
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3-flash-preview",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extract product name, max_price, and shipping preference from this text.\nReturn ONLY valid JSON with no markdown, no code blocks.\n\nExample output: {\"product\": \"wireless charger\", \"max_price\": 2000, \"shipping\": \"standard\"}\n\nUser text:{{ $json.message.text }} "
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -1904,
+        192
+      ],
+      "id": "e606d10e-161d-41ed-9102-76a4129c815b",
+      "name": "Intent Parsing",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "l9RVEhaTnjXNrO0i",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://bacterial-scale-contractor-communication.trycloudflare.com/products  ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1312,
+        192
+      ],
+      "id": "f64beb70-aeed-49a9-8634-7256fbb221b0",
+      "name": "Call /products"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bacterial-scale-contractor-communication.trycloudflare.com/checkout  ",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ \n  JSON.stringify({\n    \"items\": $('Filter matching products').item.json.cart.items,\n    \"shipping\": $('Filter matching products').item.json.cart.shipping,\n    \"customer_info\": {\n      \"customer_name\": $('commerce Bot').item.json.message.from.first_name\n    }\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fd6b47b6-720a-4901-b75c-b908b7cf480f",
+      "name": "Call /checkout"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bacterial-scale-contractor-communication.trycloudflare.com/audit-log ",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"product is not added to cart\",\n  \"order_id\": \"No order\",\n  \"amount\":0,\n  \"outcome\":\"failure\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        16,
+        240
+      ],
+      "id": "d8697e18-dcd7-48c7-b8f4-31c269c599dd",
+      "name": "Audit log for rejection"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1024,
+        16
+      ],
+      "id": "89a4bf2f-ae76-4ca7-b34e-f337dc4a163f",
+      "name": "user intent +products"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2112,
+        192
+      ],
+      "id": "2107eed1-05df-4c70-84a3-6408b5edfeb6",
+      "name": "commerce Bot",
+      "webhookId": "333a3402-2959-4600-97aa-00df9cf2dd77",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResponse = $input.first().json.content.parts[0].text;\nconst intent = JSON.parse(geminiResponse);\n\n// Set default shipping if null\nif (!intent.shipping) {\n  intent.shipping = \"standard\";\n}\n\nreturn intent;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1552,
+        192
+      ],
+      "id": "6a809274-46c4-478c-a95d-bcad98e3b4f7",
+      "name": "user details parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get merged data from Combine mode\nconst mergedData = $input.first().json;\n\n// The merged data should have both intent and products\n// Extract them based on the actual structure\n\n// Try to find intent (from Gemini parse node)\nconst intent = mergedData.product || mergedData.max_price ? mergedData : mergedData;\n\n// Try to find products (from HTTP Request node)\nconst products = mergedData.id ? [mergedData] : \n                 (Array.isArray(mergedData) ? mergedData : \n                 [\n                   {\"id\":\"prod_001\",\"name\":\"Wireless Charger\",\"price\":1499,\"currency\":\"INR\",\"available\":true},\n                   {\"id\":\"prod_002\",\"name\":\"USB-C Cable\",\"price\":299,\"currency\":\"INR\",\"available\":true},\n                   {\"id\":\"prod_003\",\"name\":\"Power Bank 10000mAh\",\"price\":1999,\"currency\":\"INR\",\"available\":true}\n                 ]);\n\n// If products is the merged object itself, use hardcoded\nconst productsToUse = Array.isArray(products) && products.length > 3 ? products : [\n  {\"id\":\"prod_001\",\"name\":\"Wireless Charger\",\"price\":1499,\"currency\":\"INR\",\"available\":true,\"description\":\"15W fast wireless charger\"},\n  {\"id\":\"prod_002\",\"name\":\"USB-C Cable\",\"price\":299,\"currency\":\"INR\",\"available\":true,\"description\":\"1m braided USB-C cable\"},\n  {\"id\":\"prod_003\",\"name\":\"Power Bank 10000mAh\",\"price\":1999,\"currency\":\"INR\",\"available\":true,\"description\":\"Fast charging power bank\"}\n];\n\n// Find matching product\nconst match = productsToUse.find(p => \n  p.name.toLowerCase().includes(intent.product.toLowerCase()) && \n  p.price <= intent.max_price\n);\n\nif (!match) {\n  throw new Error(`No matching product found for: ${intent.product} with max price: ${intent.max_price}`);\n}\n\nreturn {\n  product: match,\n  cart: {\n    items: [{product_id: match.id, qty: 1}],\n    shipping: intent.shipping || \"standard\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        144
+      ],
+      "id": "b634dfc3-1990-42b6-a30d-c5b8853a5b95",
+      "name": "Filter matching products"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "={{ $('commerce Bot').item.json.message.from.id }}",
+        "message": "=🛒 *Product Details*\n\n━━━━━━━━━━━━━━━━━━\n\n🎧 *{{ $json.product.name }}*\n\n💰 *Price:* ₹{{ $json.product.price }}\n💱 *Currency:* {{ $json.product.currency }}\n\n⚡ *{{ $json.product.description }}*\n\n📦 *Availability:* {{ $json.product.available ? \"✅ In Stock\" : \"❌ Out of Stock\" }}\n\n━━━━━━━━━━━━━━━━━━\n\nWould you like to add this product to your cart?",
+        "responseType": "freeText",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -496,
+        144
+      ],
+      "id": "4cb60e28-1b5e-4cdc-8f1f-b9b514c86459",
+      "name": "send recommendations",
+      "webhookId": "dbf42119-d440-425f-8895-c284cefd768f",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3d482b92-4137-4092-b5bc-a85ef9e01a4f",
+              "leftValue": "={{ $json.data.text }}",
+              "rightValue": "=yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -288,
+        144
+      ],
+      "id": "973cc9b2-1422-4c67-9955-a678d57b911b",
+      "name": "Evaluate_user_perference"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('commerce Bot').item.json.message.from.id }}",
+        "text": "=*message:*\"Payment link generated!\"\n\n*payment link:*{{ $json.payment_link }}\n\n*order id:*{{ $json.order_id }}\n\n*amount*:{{ $json.amount }}\n\n*currency*:{{ $json.currency }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "d01d3e25-dc74-4e0c-bb26-9a839c8ac626",
+      "name": "send payment link",
+      "webhookId": "5c0ed4eb-9a5a-4c88-b926-2e93d6a1eccd",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $('commerce Bot').item.json.message.from.id }}",
+        "text": "🛒❌ Product was not added to the cart. \n\nPlease try again or select another product. 🔄",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        240
+      ],
+      "id": "c6cd4247-a8af-4fea-8a23-7a5c6219770a",
+      "name": "Send a text message",
+      "webhookId": "2e1841bf-c0a1-433a-b619-b3a6a32ff230",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Intent Parsing": {
+      "main": [
+        [
+          {
+            "node": "user details parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call /products": {
+      "main": [
+        [
+          {
+            "node": "user intent +products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call /checkout": {
+      "main": [
+        [
+          {
+            "node": "send payment link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "user intent +products": {
+      "main": [
+        [
+          {
+            "node": "Filter matching products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "commerce Bot": {
+      "main": [
+        [
+          {
+            "node": "Intent Parsing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "user details parser": {
+      "main": [
+        [
+          {
+            "node": "Call /products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "user intent +products",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Filter matching products": {
+      "main": [
+        [
+          {
+            "node": "send recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send recommendations": {
+      "main": [
+        [
+          {
+            "node": "Evaluate_user_perference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate_user_perference": {
+      "main": [
+        [
+          {
+            "node": "Call /checkout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit log for rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit log for rejection": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dbc32143-19d7-4199-9205-8f7be1022f34",
+  "meta": {
+    "instanceId": "b64160c14a9dc9f0e6761004b1a786665cf0ad63eab8f1bfc7bfad0c881e4ea5"
+  },
+  "nodeGroups": [],
+  "id": "r4MUmlJKXxCpIZ3g",
+  "tags": []
+}

@@ -1,0 +1,144 @@
+{
+  "name": "Payment Status Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user agent",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -208,
+        -16
+      ],
+      "id": "c378ff1b-2ff0-4e8c-a045-01c20939494b",
+      "name": "Webhook",
+      "webhookId": "46993ca4-ceec-4b5e-a3b5-cfb243b50ccd"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "90682305-2404-4960-94e8-e18ea5d48eb0",
+              "leftValue": "={{ $json.body.event }}",
+              "rightValue": "payment.captured",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        -16
+      ],
+      "id": "c2267dfc-60b3-4c30-bce7-8ce6d0719e3d",
+      "name": "payment status"
+    },
+    {
+      "parameters": {
+        "chatId": "8921782440",
+        "text": "=🎉 *Payment Captured Successfully!*\n\n🧾 *Order ID:* `{{ $json.body.payload.payment.entity.order_id }}`\n\n Thank you for your payment!\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        288,
+        -160
+      ],
+      "id": "9963f6e0-27af-478e-9b0a-12cecaa3e560",
+      "name": "payment success notification",
+      "webhookId": "7c1ac745-e1af-497e-838c-4b6ed16a1f7a",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8921782440",
+        "text": "=❌ *Payment Failed*\n\n━━━━━━━━━━━━━━━━━━\n\n🧾 *Order ID:* `{{ $json.body.payload.payment.entity.order_id }}`\n\n⚠️ Unfortunately, your payment could not be completed.\n\n💳 *No money was deducted from your bank account.*\n\n🔄 You can try making the payment again using the payment link.\n\n⏳ *Payment link validity:* 1 hour from the time it was generated.\n\n━━━━━━━━━━━━━━━━━━\n\n💡 Please complete the payment within the validity period.\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        304,
+        112
+      ],
+      "id": "88d9258c-9df3-4eac-a820-4e07f04384e7",
+      "name": "payment failed notification",
+      "webhookId": "686f556a-0524-485e-a6d2-19ead7f3f2e0",
+      "credentials": {
+        "telegramApi": {
+          "id": "7b42q24Xh8ZCzoZ8",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "payment status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "payment status": {
+      "main": [
+        [
+          {
+            "node": "payment success notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "payment failed notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "61529d17-bacb-4ff9-b562-a04e8946e6b5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b64160c14a9dc9f0e6761004b1a786665cf0ad63eab8f1bfc7bfad0c881e4ea5"
+  },
+  "nodeGroups": [],
+  "id": "bxu6SQBPJbIm2Ga4",
+  "tags": []
+}
